@@ -60,7 +60,7 @@ export default function App() {
 
   function applyStatusFilter(speakers: Speaker[]) {
     if (statusFilter === "not-arrived") return speakers.filter(s => !status[s.id]?.arrived);
-    if (statusFilter === "arrived")     return speakers.filter(s => status[s.id]?.arrived && !status[s.id]?.inRoom);
+    if (statusFilter === "arrived")     return speakers.filter(s => status[s.id]?.arrived);
     if (statusFilter === "in-room")     return speakers.filter(s => status[s.id]?.inRoom);
     return speakers;
   }

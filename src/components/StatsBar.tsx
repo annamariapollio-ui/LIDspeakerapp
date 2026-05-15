@@ -17,13 +17,12 @@ const DOT: Record<StatusFilter, string> = {
 
 export default function StatsBar({ total, arrived, inRoom, activeFilter, onFilter }: Props) {
   const notArrived = total - arrived;
-  const arrivedOnly = arrived - inRoom;
 
   const tiles: { filter: StatusFilter; value: number; label: string }[] = [
-    { filter: "all",         value: total,       label: "Total" },
-    { filter: "not-arrived", value: notArrived,   label: "Not arrived" },
-    { filter: "arrived",     value: arrivedOnly,  label: "Arrived" },
-    { filter: "in-room",     value: inRoom,       label: "In room" },
+    { filter: "all",         value: total,      label: "Total" },
+    { filter: "not-arrived", value: notArrived, label: "Not arrived" },
+    { filter: "arrived",     value: arrived,    label: "Arrived" },
+    { filter: "in-room",     value: inRoom,     label: "In room" },
   ];
 
   return (
