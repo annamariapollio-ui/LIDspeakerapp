@@ -1,44 +1,51 @@
 import { useState, useEffect } from "react";
 import { SPEAKERS, ROOMS, type Speaker } from "./data/speakers";
 import SpeakerCard from "./components/SpeakerCard";
-import StatsBar from "./components/StatsBar";
+import SpeakerListCard from "./components/SpeakerListCard";
+import StatsBar, { type StatusFilter } from "./components/StatsBar";
 import "./index.css";
 
 const ALL = "All";
-
+type View = "agenda" | "speakers";
 type StatusMap = Record<string, { arrived: boolean; inRoom: boolean }>;
 
-function loadStatus(): StatusMap {
+function getInitialStatus(): StatusMap {
   try {
     const saved = localStorage.getItem("lid-speaker-status");
-    return saved ? JSON.parse(saved) : {};
+    const parsed: StatusMap = saved ? JSON.parse(saved) : {};
+    const init: StatusMap = {};
+    for (const s of SPEAKERS) {
+      init[s.id] = parsed[s.id] ?? { arrived: false, inRoom: false };
+    }
+    return init;
   } catch {
-    return {};
+    const init: StatusMap = {};
+    for (const s of SPEAKERS) init[s.id] = { arrived: false, inRoom: false };
+    return init;
   }
-}
-
-function getInitialStatus(): StatusMap {
-  const saved = loadStatus();
-  const init: StatusMap = {};
-  for (const s of SPEAKERS) {
-    init[s.id] = saved[s.id] ?? { arrived: false, inRoom: false };
-  }
-  return init;
 }
 
 export default function App() {
-  const [activeRoom, setActiveRoom] = useState<string>(ALL);
-  const [status, setStatus] = useState<StatusMap>(getInitialStatus);
+  const [view, setView]               = useState<View>("agenda");
+  const [activeRoom, setActiveRoom]   = useState<string>(ALL);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [search, setSearch]           = useState("");
+  const [status, setStatus]           = useState<StatusMap>(getInitialStatus);
 
   useEffect(() => {
     localStorage.setItem("lid-speaker-status", JSON.stringify(status));
   }, [status]);
 
+  // When switching views, keep status filter but reset search/room
+  function switchView(v: View) {
+    setView(v);
+    setSearch("");
+  }
+
   function handleToggle(speaker: Speaker, field: "arrived" | "inRoom") {
     setStatus(prev => {
       const current = prev[speaker.id];
       const next = { ...current };
-
       if (field === "arrived") {
         next.arrived = !current.arrived;
         if (!next.arrived) next.inRoom = false;
@@ -46,97 +53,164 @@ export default function App() {
         next.inRoom = !current.inRoom;
         if (next.inRoom) next.arrived = true;
       }
-
       return { ...prev, [speaker.id]: next };
     });
   }
 
-  const rooms = [ALL, ...ROOMS];
-  const filtered = activeRoom === ALL
-    ? SPEAKERS
-    : SPEAKERS.filter(s => s.room === activeRoom);
+  function applyStatusFilter(speakers: Speaker[]) {
+    if (statusFilter === "not-arrived") return speakers.filter(s => !status[s.id]?.arrived);
+    if (statusFilter === "arrived")     return speakers.filter(s => status[s.id]?.arrived && !status[s.id]?.inRoom);
+    if (statusFilter === "in-room")     return speakers.filter(s => status[s.id]?.inRoom);
+    return speakers;
+  }
 
-  const sortedFiltered = [...filtered].sort((a, b) =>
-    a.timeStart.localeCompare(b.timeStart)
+  // ── Agenda view ───────────────────────────────────────────────────
+  const agendaSpeakers = applyStatusFilter(
+    (activeRoom === ALL ? SPEAKERS : SPEAKERS.filter(s => s.room === activeRoom))
+      .slice()
+      .sort((a, b) => a.timeStart.localeCompare(b.timeStart))
+  );
+
+  // ── Speaker view ──────────────────────────────────────────────────
+  const q = search.toLowerCase();
+  const speakerViewList = applyStatusFilter(
+    SPEAKERS.filter(s =>
+      !q ||
+      s.name.toLowerCase().includes(q) ||
+      s.bio.toLowerCase().includes(q) ||
+      s.topic.toLowerCase().includes(q) ||
+      s.room.toLowerCase().includes(q)
+    ).slice().sort((a, b) => a.name.localeCompare(b.name))
   );
 
   const totalArrived = SPEAKERS.filter(s => status[s.id]?.arrived).length;
   const totalInRoom  = SPEAKERS.filter(s => status[s.id]?.inRoom).length;
 
-  function handleResetAll() {
-    if (!confirm("Reset all speaker statuses?")) return;
-    const reset: StatusMap = {};
-    for (const s of SPEAKERS) reset[s.id] = { arrived: false, inRoom: false };
-    setStatus(reset);
-  }
-
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+
+      {/* ── Header ─────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 leading-tight">
-                LID 2026 — Speaker Manager
-              </h1>
-              <p className="text-sm text-gray-500">Lifestyle Innovation Day</p>
-            </div>
-            <button
-              onClick={handleResetAll}
-              className="text-sm text-gray-400 hover:text-red-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-red-50"
-            >
-              Reset all
-            </button>
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 leading-tight">LID 2026 — Speaker Manager</h1>
+            <p className="text-sm text-gray-500">Lifestyle Innovation Day · 18 May 2026 · LAC Center, Lugano</p>
+          </div>
+          {/* View toggle */}
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+            {(["agenda", "speakers"] as View[]).map(v => (
+              <button
+                key={v}
+                onClick={() => switchView(v)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all
+                  ${view === v
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                  }`}
+              >
+                {v === "agenda" ? "📋 Agenda" : "👥 Speakers"}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col gap-6">
-        {/* Stats */}
+
+        {/* ── Stats bar (clickable filters) ──────────────────────── */}
         <StatsBar
           total={SPEAKERS.length}
           arrived={totalArrived}
           inRoom={totalInRoom}
+          activeFilter={statusFilter}
+          onFilter={setStatusFilter}
         />
 
-        {/* Room Filter */}
-        <div className="flex gap-2 flex-wrap">
-          {rooms.map(room => (
-            <button
-              key={room}
-              onClick={() => setActiveRoom(room)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all
-                ${activeRoom === room
-                  ? "bg-indigo-600 text-white shadow-md"
-                  : "bg-white text-gray-600 border border-gray-200 hover:border-indigo-300 hover:text-indigo-600"
-                }`}
-            >
-              {room}
-              {room !== ALL && (
-                <span className="ml-1.5 text-xs opacity-70">
-                  ({SPEAKERS.filter(s => s.room === room).length})
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+        {/* ── AGENDA VIEW ─────────────────────────────────────────── */}
+        {view === "agenda" && (
+          <>
+            {/* Room filter */}
+            <div className="flex gap-2 flex-wrap">
+              {[ALL, ...ROOMS].map(room => (
+                <button
+                  key={room}
+                  onClick={() => setActiveRoom(room)}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all
+                    ${activeRoom === room
+                      ? "bg-indigo-600 text-white shadow-md"
+                      : "bg-white text-gray-600 border border-gray-200 hover:border-indigo-300 hover:text-indigo-600"
+                    }`}
+                >
+                  {room}
+                  {room !== ALL && (
+                    <span className="ml-1.5 text-xs opacity-70">
+                      ({SPEAKERS.filter(s => s.room === room).length})
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
 
-        {/* Speaker Grid */}
-        {sortedFiltered.length === 0 ? (
-          <p className="text-center text-gray-400 py-16">No speakers for this room.</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {sortedFiltered.map(speaker => (
-              <SpeakerCard
-                key={speaker.id}
-                speaker={speaker}
-                status={status[speaker.id] ?? { arrived: false, inRoom: false }}
-                onToggle={(field) => handleToggle(speaker, field)}
-              />
-            ))}
-          </div>
+            {/* Cards grid */}
+            {agendaSpeakers.length === 0 ? (
+              <p className="text-center text-gray-400 py-16">No speakers match this filter.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {agendaSpeakers.map(speaker => (
+                  <SpeakerCard
+                    key={speaker.id}
+                    speaker={speaker}
+                    status={status[speaker.id] ?? { arrived: false, inRoom: false }}
+                    onToggle={field => handleToggle(speaker, field)}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
+
+        {/* ── SPEAKER VIEW ────────────────────────────────────────── */}
+        {view === "speakers" && (
+          <>
+            {/* Search */}
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+              </svg>
+              <input
+                type="search"
+                placeholder="Search by name, company, topic or room…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent shadow-sm"
+              />
+            </div>
+
+            {/* Result count */}
+            <p className="text-sm text-gray-500 -mt-2">
+              {speakerViewList.length} speaker{speakerViewList.length !== 1 ? "s" : ""}
+              {statusFilter !== "all" && ` · filtered by "${statusFilter}"`}
+              {search && ` · matching "${search}"`}
+            </p>
+
+            {/* List */}
+            {speakerViewList.length === 0 ? (
+              <p className="text-center text-gray-400 py-16">No speakers match your search.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {speakerViewList.map(speaker => (
+                  <SpeakerListCard
+                    key={speaker.id}
+                    speaker={speaker}
+                    status={status[speaker.id] ?? { arrived: false, inRoom: false }}
+                    onToggle={field => handleToggle(speaker, field)}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
       </div>
     </div>
   );
