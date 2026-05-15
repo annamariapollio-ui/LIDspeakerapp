@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { SPEAKERS, ROOMS, type Speaker } from "./data/speakers";
 import SpeakerCard from "./components/SpeakerCard";
 import SpeakerListCard from "./components/SpeakerListCard";
+import SpeakerModal from "./components/SpeakerModal";
 import StatsBar, { type StatusFilter } from "./components/StatsBar";
 import "./index.css";
 
@@ -26,17 +27,17 @@ function getInitialStatus(): StatusMap {
 }
 
 export default function App() {
-  const [view, setView]               = useState<View>("agenda");
-  const [activeRoom, setActiveRoom]   = useState<string>(ALL);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [search, setSearch]           = useState("");
-  const [status, setStatus]           = useState<StatusMap>(getInitialStatus);
+  const [view, setView]                     = useState<View>("agenda");
+  const [activeRoom, setActiveRoom]         = useState<string>(ALL);
+  const [statusFilter, setStatusFilter]     = useState<StatusFilter>("all");
+  const [search, setSearch]                 = useState("");
+  const [status, setStatus]                 = useState<StatusMap>(getInitialStatus);
+  const [selectedSpeaker, setSelectedSpeaker] = useState<Speaker | null>(null);
 
   useEffect(() => {
     localStorage.setItem("lid-speaker-status", JSON.stringify(status));
   }, [status]);
 
-  // When switching views, keep status filter but reset search/room
   function switchView(v: View) {
     setView(v);
     setSearch("");
@@ -91,18 +92,18 @@ export default function App() {
 
       {/* ── Header ─────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900 leading-tight">LID 2026 — Speaker Manager</h1>
-            <p className="text-sm text-gray-500">Lifestyle Innovation Day · 18 May 2026 · LAC Center, Lugano</p>
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-xl font-bold text-gray-900 leading-tight truncate">LID 2026 — Speaker Manager</h1>
+            <p className="text-xs text-gray-400 hidden sm:block">Lifestyle Innovation Day · 18 May 2026 · LAC Center, Lugano</p>
           </div>
           {/* View toggle */}
-          <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1 flex-shrink-0">
             {(["agenda", "speakers"] as View[]).map(v => (
               <button
                 key={v}
                 onClick={() => switchView(v)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all
+                className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium capitalize transition-all
                   ${view === v
                     ? "bg-white text-gray-900 shadow-sm"
                     : "text-gray-500 hover:text-gray-700"
@@ -115,7 +116,7 @@ export default function App() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col gap-6">
+      <div className="max-w-7xl mx-auto px-4 py-4 sm:py-6 flex flex-col gap-4 sm:gap-6">
 
         {/* ── Stats bar (clickable filters) ──────────────────────── */}
         <StatsBar
@@ -129,13 +130,13 @@ export default function App() {
         {/* ── AGENDA VIEW ─────────────────────────────────────────── */}
         {view === "agenda" && (
           <>
-            {/* Room filter */}
-            <div className="flex gap-2 flex-wrap">
+            {/* Room filter — horizontal scroll on mobile */}
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap sm:overflow-visible no-scrollbar">
               {[ALL, ...ROOMS].map(room => (
                 <button
                   key={room}
                   onClick={() => setActiveRoom(room)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all
+                  className={`px-3 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-medium transition-all flex-shrink-0
                     ${activeRoom === room
                       ? "bg-indigo-600 text-white shadow-md"
                       : "bg-white text-gray-600 border border-gray-200 hover:border-indigo-300 hover:text-indigo-600"
@@ -143,7 +144,7 @@ export default function App() {
                 >
                   {room}
                   {room !== ALL && (
-                    <span className="ml-1.5 text-xs opacity-70">
+                    <span className="ml-1 text-xs opacity-70">
                       ({SPEAKERS.filter(s => s.room === room).length})
                     </span>
                   )}
@@ -155,13 +156,14 @@ export default function App() {
             {agendaSpeakers.length === 0 ? (
               <p className="text-center text-gray-400 py-16">No speakers match this filter.</p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                 {agendaSpeakers.map(speaker => (
                   <SpeakerCard
                     key={speaker.id}
                     speaker={speaker}
                     status={status[speaker.id] ?? { arrived: false, inRoom: false }}
                     onToggle={field => handleToggle(speaker, field)}
+                    onSelect={() => setSelectedSpeaker(speaker)}
                   />
                 ))}
               </div>
@@ -187,7 +189,7 @@ export default function App() {
             </div>
 
             {/* Result count */}
-            <p className="text-sm text-gray-500 -mt-2">
+            <p className="text-xs text-gray-500 -mt-2">
               {speakerViewList.length} speaker{speakerViewList.length !== 1 ? "s" : ""}
               {statusFilter !== "all" && ` · filtered by "${statusFilter}"`}
               {search && ` · matching "${search}"`}
@@ -204,6 +206,7 @@ export default function App() {
                     speaker={speaker}
                     status={status[speaker.id] ?? { arrived: false, inRoom: false }}
                     onToggle={field => handleToggle(speaker, field)}
+                    onSelect={() => setSelectedSpeaker(speaker)}
                   />
                 ))}
               </div>
@@ -212,6 +215,16 @@ export default function App() {
         )}
 
       </div>
+
+      {/* ── Speaker profile modal ───────────────────────────────────── */}
+      {selectedSpeaker && (
+        <SpeakerModal
+          speaker={selectedSpeaker}
+          status={status[selectedSpeaker.id] ?? { arrived: false, inRoom: false }}
+          onToggle={field => handleToggle(selectedSpeaker, field)}
+          onClose={() => setSelectedSpeaker(null)}
+        />
+      )}
     </div>
   );
 }
